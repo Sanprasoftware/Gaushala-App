@@ -1,0 +1,327 @@
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+class AddCollectionScreen extends StatefulWidget {
+  const AddCollectionScreen({super.key});
+
+  @override
+  State<AddCollectionScreen> createState() => _AddCollectionScreenState();
+}
+
+class _AddCollectionScreenState extends State<AddCollectionScreen> {
+  final _formKey = GlobalKey<FormState>();
+  DateTime? _selectedDate = DateTime.now(); // Default to today
+  String? _selectedSupplier;
+  List<String> _supplierList = [];
+  final TextEditingController _qtyController = TextEditingController();
+
+  bool _isLoading = true;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSuppliers();
+  }
+
+  Future<void> _fetchSuppliers() async {
+    try {
+      const apiUrl = 'https://goshala.erpkey.in/api/resource/Supplier';
+      final uri = Uri.parse(apiUrl).replace(queryParameters: {
+        'fields': jsonEncode(['name']),
+      });
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> suppliers = data['data'] ?? [];
+        setState(() {
+          _supplierList = suppliers.map((s) => s['name'].toString()).toList();
+          _isLoading = false;
+        });
+      } else {
+        throw Exception('Failed to load suppliers');
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to fetch suppliers')),
+      );
+    }
+  }
+
+  Future<Map<String, String>?> _fetchItemAndWarehouse() async {
+    const url =
+        'https://goshala.erpkey.in/api/resource/Goshala%20Setting/Goshala%20Setting';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return {
+        'item_code': data['data']['purchase_item'],
+        'warehouse': data['data']['purchase_warehouse'],
+      };
+    } else {
+      print('Error fetching item/warehouse: ${response.body}');
+      return null;
+    }
+  }
+
+  Future<void> _submitCollection() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    final setting = await _fetchItemAndWarehouse();
+    if (setting == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to fetch item & warehouse')),
+      );
+      setState(() {
+        _isSubmitting = false;
+      });
+      return;
+    }
+
+    final String itemCode = setting['item_code']!;
+    final String warehouse = setting['warehouse']!;
+    final String supplier = _selectedSupplier!;
+    final String qty = _qtyController.text.trim();
+
+    final apiUrl = 'https://goshala.erpkey.in/api/resource/Purchase Receipt';
+
+    final body = jsonEncode({
+      'supplier': supplier,
+      "docstatus": 1,
+      'posting_date':
+      '${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}',
+      'items': [
+        {
+          'item_code': itemCode,
+          'qty': double.tryParse(qty) ?? 0,
+          'warehouse': warehouse,
+          'uom': 'Litre',
+        }
+      ]
+    });
+
+    try {
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
+          'Content-Type': 'application/json',
+        },
+        body: body,
+      );
+
+      print('Submit Response: ${response.statusCode}');
+      print('Body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Collection added successfully')),
+        );
+        Navigator.pop(context);
+      } else {
+        final responseBody = jsonDecode(response.body);
+        String errorMsg = responseBody['exception'] ?? 'Failed to add collection';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
+      }
+    } catch (e) {
+      print('Exception: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error submitting collection')),
+      );
+    } finally {
+      setState(() {
+        _isSubmitting = false;
+      });
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate ?? now,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 5),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _qtyController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final formattedDate = _selectedDate != null
+        ? '${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}'
+        : '';
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white.withOpacity(0.9),
+        elevation: 4,
+        automaticallyImplyLeading: true,
+        title: const Center(
+          child: Text(
+            'Add Collection',
+            style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFFFD700), Color(0xFFFFFF99)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                TextFormField(
+                  readOnly: true,
+                  onTap: _pickDate,
+                  decoration: InputDecoration(
+                    labelText: 'Select Date',
+                    border: OutlineInputBorder(),
+                    prefixIcon:
+                    Icon(Icons.calendar_today, color: Colors.blue[900]),
+                  ),
+                  controller: TextEditingController(text: formattedDate),
+                  validator: (value) {
+                    if (_selectedDate == null) {
+                      return 'Please select a date';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<String>(
+                  value: _selectedSupplier,
+                  hint: const Text('Select Cow ID (Supplier)'),
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.pets, color: Colors.blue[900]),
+                  ),
+                  items: _supplierList.map((String supplier) {
+                    return DropdownMenuItem<String>(
+                      value: supplier,
+                      child: Text(supplier),
+                    );
+                  }).toList(),
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      _selectedSupplier = newValue;
+                    });
+                  },
+                  validator: (value) {
+                    if (value == null) return 'Please select Cow ID';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+                TextFormField(
+                  controller: _qtyController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: 'Enter Quantity (Ltr)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.scale, color: Colors.blue[900]),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please enter quantity';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 30),
+                ElevatedButton(
+                  onPressed: _isSubmitting ? null : _submitCollection,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[900],
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 50, vertical: 15),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15)),
+                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2),
+                  )
+                      : const Text(
+                    'Add Collection',
+                    style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: Container(
+        color: Colors.blue[900],
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.home, color: Colors.white, size: 30),
+              onPressed: () {
+                Navigator.pushNamed(context, '/home');
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.info, color: Colors.white, size: 30),
+              onPressed: () {
+                Navigator.pushNamed(context, '/about');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
