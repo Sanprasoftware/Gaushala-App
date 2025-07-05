@@ -55,11 +55,19 @@ class _LoginPageState extends State<LoginPage> {
         final String? apiSecret = data['key_details']?['api_secret']?.toString();
         final String? apiKey = data['key_details']?['api_key']?.toString();
 
+        final String? fullName = data['full_name']?.toString(); // get full name
+
         if (apiSecret != null && apiKey != null) {
           await _storage.write(key: 'api_secret', value: apiSecret);
           await _storage.write(key: 'api_key', value: apiKey);
+
+          if (fullName != null) {
+            await _storage.write(key: 'full_name', value: fullName);
+          }
+
           _navigateToHome();
-        } else {
+        }
+        else {
           _showError('Missing credentials in response');
         }
       } else {
