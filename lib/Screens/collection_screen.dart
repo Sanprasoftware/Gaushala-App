@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // For secure storage
-import 'loginpage.dart'; // Import LoginPage to use getToken
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'loginpage.dart';
 
 class CollectionScreen extends StatefulWidget {
   const CollectionScreen({super.key});
@@ -22,8 +22,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
   }
 
   Future<void> fetchCollections() async {
-    final String? token = await getToken(); // Get token from LoginPage
-    const String apiUrl = 'https://goshala.erpkey.in/api/resource/Purchase%20Receipt?fields=["name","posting_date"]&order_by=posting_date desc';
+    final String? token = await getToken();
+    const String apiUrl =
+        'https://goshala.erpkey.in/api/resource/Purchase Receipt?fields=["name","posting_date","supplier","total_qty"]&order_by=posting_date desc';
 
     if (token == null || token.isEmpty) {
       setState(() {
@@ -43,12 +44,9 @@ class _CollectionScreenState extends State<CollectionScreen> {
           'Content-Type': 'application/json',
         },
       );
-      print('API Response Status: ${response.statusCode}'); // Debug: Log status code
-      print('API Response Body: ${response.body}'); // Debug: Log full response
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        print('Parsed Data: $data'); // Debug: Log parsed JSON
         setState(() {
           collections = data['data'] ?? [];
           isLoading = false;
@@ -62,7 +60,6 @@ class _CollectionScreenState extends State<CollectionScreen> {
         );
       }
     } catch (e) {
-      print('Exception Caught: $e'); // Debug: Log exception details
       setState(() {
         isLoading = false;
       });
@@ -78,7 +75,7 @@ class _CollectionScreenState extends State<CollectionScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 4,
-        automaticallyImplyLeading: true, // Show back arrow
+        automaticallyImplyLeading: true,
         title: const Center(
           child: Text(
             'Collections',
@@ -111,35 +108,47 @@ class _CollectionScreenState extends State<CollectionScreen> {
           itemCount: collections.length,
           itemBuilder: (context, index) {
             final collection = collections[index];
-            // Try different field names to find the correct one for Purchase Receipt
-            String name = collection['name'] ?? collection['purchase_receipt_no'] ?? 'Unknown';
-            String date = collection['posting_date'] ?? collection['transaction_date'] ?? 'N/A';
-            // String amount = collection['grand_total']?.toString() ?? 'N/A';
+            final name = collection['name'] ?? 'Unknown';
+            final date = collection['posting_date'] ?? '-';
+            final cowId = collection['supplier'] ?? 'N/A';
+            final totalQty = (collection['total_qty'] ?? 0).toString();
+
             return Card(
-              elevation: 4,
-              color: Colors.white.withOpacity(0.85),
+              elevation: 5,
+              margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.blue[900]!.withOpacity(0.3), width: 1),
               ),
-              margin: const EdgeInsets.symmetric(vertical: 8.0),
-              child: ListTile(
-                title: Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
+              color: Colors.white.withOpacity(0.95),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border(
+                    left: BorderSide(
+                      color: Colors.blue[900]!,
+                      width: 5,
+                    ),
                   ),
                 ),
-                subtitle: Column(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Date: $date', style: const TextStyle(color: Colors.black54)),
-                    // Text('Amount: ₹$amount', style: const TextStyle(color: Colors.black54)),
+                    Text(
+                      name,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16.5),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("📅 $date", style: const TextStyle(fontSize: 13.5)),
+                        Text("🐄 $cowId", style: const TextStyle(fontSize: 13.5)),
+                        Text("🥛 $totalQty L", style: const TextStyle(fontSize: 13.5)),
+                      ],
+                    ),
                   ],
                 ),
-                leading: Icon(Icons.receipt, color: Colors.blue[900]),
               ),
             );
           },

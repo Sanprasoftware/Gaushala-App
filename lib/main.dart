@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:gaushala/Screens/about_page.dart';
 import 'package:gaushala/Screens/add_collection_screen.dart';
 import 'package:gaushala/Screens/add_supplier_screen.dart';
 import 'package:gaushala/Screens/collection_screen.dart';
@@ -32,7 +33,7 @@ class GaushalaApp extends StatelessWidget {
         '/collection': (context) => const CollectionScreen(),
         '/add_collection': (context) => const AddCollectionScreen(),
         '/report': (context) => const ReportScreen(),
-        '/about': (context) => const PlaceholderScreen(title: 'About Page'),
+        '/about': (context) => const AboutPage(),
         '/dashboard': (context) => const PlaceholderScreen(title: 'Dashboard Page'),
         '/add_supplier': (context) => AddSupplierScreen(refreshSupplierList: () {}),
         '/material_transfer': (context) => const MaterialTransferScreen(),

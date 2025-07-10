@@ -24,7 +24,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
   Future<void> fetchSuppliers() async {
     final String? token = await getToken(); // Get token from LoginPage
     print('Fetched Token: $token'); // Debug: Log the token
-    const String apiUrl = 'https://goshala.erpkey.in/api/resource/Supplier?fields=["name","custom_animal_type","custom_age_months","custom_supplier_parent"]';
+    const String apiUrl = 'https://goshala.erpkey.in/api/resource/Supplier?fields=["name","custom_animal_type","custom_age_months","custom_gender","custom_supplier_parent"]';
     if (token == null || token.isEmpty) {
       print('Error: Token is null or empty'); // Debug: Log token issue
       setState(() {
@@ -89,8 +89,9 @@ class _SupplierScreenState extends State<SupplierScreen> {
         actions: [
           IconButton(
             icon: Icon(Icons.add, color: Colors.blue[900], size: 30),
-            onPressed: () {
-              Navigator.pushNamed(context, '/add_supplier');
+            onPressed: () async {
+              await Navigator.pushNamed(context, '/add_supplier');
+              fetchSuppliers(); // <-- Re-fetch supplier list when back from AddSupplierScreen
             },
           ),
         ],
@@ -170,18 +171,29 @@ class _SupplierScreenState extends State<SupplierScreen> {
 
                           const SizedBox(height: 6),
 
-                          // Row 2: Age + Parent
+                          // Row 2: Age + Gender + Parent
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               if (supplier['custom_age_months'] != null)
-                                Expanded(
+                                Flexible(
                                   child: Text(
                                     "📆 ${supplier['custom_age_months']}",
                                     style: const TextStyle(fontSize: 13, color: Colors.black54),
                                   ),
                                 ),
+                              if (supplier['custom_gender'] != null)
+                                Flexible(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                    child: Text(
+                                      "⚥ ${supplier['custom_gender']}",
+                                      style: const TextStyle(fontSize: 13, color: Colors.black54),
+                                    ),
+                                  ),
+                                ),
                               if (supplier['custom_supplier_parent'] != null)
-                                Expanded(
+                                Flexible(
                                   child: Text(
                                     "👤 ${supplier['custom_supplier_parent']}",
                                     textAlign: TextAlign.right,

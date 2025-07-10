@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart'; // For date formatting
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ReportScreen extends StatefulWidget {
   const ReportScreen({super.key});
@@ -26,58 +27,25 @@ class _ReportScreenState extends State<ReportScreen> {
     // _fetchSuppliers();
   }
 
-  // Future<void> _fetchSuppliers() async {
-  //   final String apiUrl = 'https://goshala.erpkey.in/api/method/frappe.client.get_list';
-  //   final uri = Uri.parse(apiUrl).replace(
-  //     queryParameters: {
-  //       'doctype': 'Supplier',
-  //       'fields': jsonEncode(['name']),
-  //     },
-  //   );
-  //
-  //   try {
-  //     final response = await http.get(
-  //       uri,
-  //       headers: {
-  //         'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
-  //         'X-Frappe-CSRF-Token': '8736ed027656f233b77fb3587a762737ef3e62c2cf52b5170d71b006',
-  //         'Content-Type': 'application/json',
-  //         'Accept': 'application/json',
-  //       },
-  //     );
-  //
-  //     print('Suppliers Response Status: ${response.statusCode}');
-  //     print('Suppliers Response Body: ${response.body}');
-  //
-  //     if (response.statusCode == 200) {
-  //       final data = jsonDecode(response.body);
-  //       final List<dynamic> suppliers = data['message'] ?? [];
-  //       if (mounted) {
-  //         setState(() {
-  //           _suppliers = suppliers.map((s) => s['name'] as String).toList();
-  //         });
-  //       }
-  //     } else {
-  //       throw Exception('Failed to fetch suppliers: ${response.statusCode} - ${response.body}');
-  //     }
-  //   } catch (e) {
-  //     print('Detailed Suppliers Fetch Exception: $e');
-  //     if (mounted) {
-  //       setState(() {
-  //         _suppliers = [];
-  //       });
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(content: Text('Error fetching suppliers: $e')),
-  //       );
-  //     }
-  //   }
-  // }
+  Future<String?> getToken() async {
+    final FlutterSecureStorage storage = FlutterSecureStorage();
+    final String apiSecret = await storage.read(key: "api_secret") ?? "";
+    final String apiKey = await storage.read(key: "api_key") ?? "";
+    return 'token $apiKey:$apiSecret';
+  }
+
 
   Future<Map<String, dynamic>> _fetchReport() async {
     final String apiUrl = 'https://goshala.erpkey.in/api/method/frappe.desk.query_report.run';
+
+    final String? token = await getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Authentication token not found');
+    }
+
     final uri = Uri.parse(apiUrl).replace(
       queryParameters: {
-        'report_name': 'Stock Ledger', // Replace with the correct report name from your Frappe instance
+        'report_name': 'Stock Ledger',
         'filters': jsonEncode({
           'company': 'Goshala',
           'from_date': DateFormat('yyyy-MM-dd').format(_fromDate),
@@ -95,17 +63,15 @@ class _ReportScreenState extends State<ReportScreen> {
       final response = await http.get(
         uri,
         headers: {
-          'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
-          'X-Frappe-CSRF-Token': '8736ed027656f233b77fb3587a762737ef3e62c2cf52b5170d71b006',
+          'Authorization': token,
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+          'User-Agent': 'Mozilla/5.0',
           'Referer': 'https://goshala.erpkey.in/app/query-report/Stock%20Ledger',
         },
       );
 
       print('Report Response Status: ${response.statusCode}');
-      print('Report Response Headers: ${response.headers}');
       print('Report Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
@@ -198,29 +164,6 @@ class _ReportScreenState extends State<ReportScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              // DropdownButtonFormField<String>(
-              //   value: _selectedSupplier,
-              //   hint: const Text('Select Supplier (Optional)'),
-              //   decoration: InputDecoration(
-              //     border: OutlineInputBorder(),
-              //     prefixIcon: const Icon(Icons.person),
-              //   ),
-              //   items: _suppliers.map((String supplier) {
-              //     return DropdownMenuItem<String>(
-              //       value: supplier,
-              //       child: Text(supplier),
-              //     );
-              //   }).toList(),
-              //   onChanged: (String? newValue) {
-              //     if (mounted) {
-              //       setState(() {
-              //         _selectedSupplier = newValue;
-              //         _refreshNotifier.value = !_refreshNotifier.value;
-              //       });
-              //     }
-              //   },
-              // ),
-              // const SizedBox(height: 20),
               Expanded(
                 child: ValueListenableBuilder<bool>(
                   valueListenable: _refreshNotifier,

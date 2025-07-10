@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
+import 'loginpage.dart';
 
 class AddCollectionScreen extends StatefulWidget {
   const AddCollectionScreen({super.key});
@@ -16,6 +18,7 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
   List<String> _supplierList = [];
   final TextEditingController _qtyController = TextEditingController();
 
+
   bool _isLoading = true;
   bool _isSubmitting = false;
 
@@ -25,8 +28,18 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
     _fetchSuppliers();
   }
 
+  Future<String?> getToken() async {
+    final FlutterSecureStorage storage = FlutterSecureStorage();
+    final String apiSecret = await storage.read(key: "api_secret") ?? "";
+    final String apiKey = await storage.read(key: "api_key") ?? "";
+    return 'token $apiKey:$apiSecret';
+  }
+
+
   Future<void> _fetchSuppliers() async {
     try {
+      final token = await getToken();
+
       const apiUrl = 'https://goshala.erpkey.in/api/resource/Supplier';
       final uri = Uri.parse(apiUrl).replace(queryParameters: {
         'fields': jsonEncode(['name']),
@@ -35,10 +48,13 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
       final response = await http.get(
         uri,
         headers: {
-          'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
+          'Authorization': token ?? '',
           'Content-Type': 'application/json',
         },
       );
+
+      print('Supplier Response Status: ${response.statusCode}');
+      print('Supplier Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -51,22 +67,25 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
         throw Exception('Failed to load suppliers');
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      print('Supplier fetch error: $e');
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to fetch suppliers')),
       );
     }
   }
 
+
+
   Future<Map<String, String>?> _fetchItemAndWarehouse() async {
-    const url =
-        'https://goshala.erpkey.in/api/resource/Goshala%20Setting/Goshala%20Setting';
+    final token = await getToken();
+
+    const url = 'https://goshala.erpkey.in/api/resource/Goshala%20Setting/Goshala%20Setting';
+
     final response = await http.get(
       Uri.parse(url),
       headers: {
-        'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
+        'Authorization': token ?? '',
         'Content-Type': 'application/json',
       },
     );
@@ -82,6 +101,7 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
       return null;
     }
   }
+
 
   Future<void> _submitCollection() async {
     if (!_formKey.currentState!.validate()) return;
@@ -124,14 +144,17 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
     });
 
     try {
+      final token = await getToken();
+
       final response = await http.post(
         Uri.parse(apiUrl),
         headers: {
-          'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
+          'Authorization': token ?? '',
           'Content-Type': 'application/json',
         },
         body: body,
       );
+
 
       print('Submit Response: ${response.statusCode}');
       print('Body: ${response.body}');

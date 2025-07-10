@@ -32,15 +32,20 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
     _fetchParentOptions();
   }
 
+  Future<String?> getToken() async {
+    final FlutterSecureStorage storage = FlutterSecureStorage();
+    final String apiSecret = await storage.read(key: "api_secret") ?? "";
+    final String apiKey = await storage.read(key: "api_key") ?? "";
+    return 'token $apiKey:$apiSecret';
+  }
+
   Future<void> _fetchParentOptions() async {
     final String? token = await getToken();
     if (token == null || token.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Authentication token not found')),
       );
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
       return;
     }
 
@@ -51,12 +56,12 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
           .replace(queryParameters: {'fields': jsonEncode(['name'])});
 
       final supplierRes = await http.get(supplierUri, headers: {
-        'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
+        'Authorization': token,
         'Content-Type': 'application/json',
       });
 
       final animalRes = await http.get(animalUri, headers: {
-        'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
+        'Authorization': token,
         'Content-Type': 'application/json',
       });
 
@@ -82,6 +87,7 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
       );
     }
   }
+
 
 
 
@@ -118,7 +124,7 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
         final response = await http.post(
           Uri.parse(apiUrl),
           headers: {
-            'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
+            'Authorization': token,
             'Content-Type': 'application/json',
           },
           body: jsonEncode({
@@ -132,6 +138,30 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
                 : null,
           }),
         );
+        if (response.statusCode == 200 || response.statusCode == 201) {
+          // Extract the supplier name (if available in response)
+          final responseBody = jsonDecode(response.body);
+          final String supplierName = responseBody['data']?['name'];
+
+          if (supplierName.isNotEmpty) {
+            // Call the age update method
+            final updateResponse = await http.post(
+              Uri.parse('https://goshala.erpkey.in/api/method/goshala_sanpra.custom_pyfile.cal_age.update_supplier_age'),
+              headers: {
+                'Authorization': token,
+                'Content-Type': 'application/json',
+              },
+              body: jsonEncode({'name': supplierName}),
+            );
+
+            if (updateResponse.statusCode == 200) {
+              print("Age update successful");
+            } else {
+              print("Failed to update age: ${updateResponse.body}");
+            }
+          }
+        }
+
 
         print('Add Supplier Response Status: ${response.statusCode}');
         print('Add Supplier Response Body: ${response.body}');
@@ -189,151 +219,171 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
           ),
         ),
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFFFD700), Color(0xFFFFFF99)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+      body: SafeArea(
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFFFFD700), Color(0xFFFFFF99)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
           ),
-        ),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: _cowIdController,
-                  decoration: InputDecoration(
-                    labelText: 'Cow ID',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.local_dining, color: Colors.blue[900]),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter Cow ID';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 20),
-                DropdownButtonFormField<String>(
-                  value: _parentId,
-                  hint: Text('Select Parent ID (Optional)'),
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.link, color: Colors.blue[900]),
-                  ),
-                  items: _parentOptions.map((String option) {
-                    return DropdownMenuItem<String>(
-                      value: option,
-                      child: Text(option),
-                    );
-                  }).toList(),
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      _parentId = newValue;
-                    });
-                  },
-                ),
-                const SizedBox(height: 20),
-                // const SizedBox(height: 20),
-                DropdownButtonFormField<String>(
-                  value: _selectedGender != '' ? _selectedGender : null,
-                  hint: const Text('Select Gender'),
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person, color: Colors.blue[900]),
-                  ),
-                  items: ['Male', 'Female'].map((String value) {
-                    return DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(value),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedGender = value;
-                    });
-                  },
-                ),
-
-                const SizedBox(height: 20),
-                DropdownButtonFormField<String>(
-                  value: _selectedAnimalType,
-                  hint: const Text('Select Animal Type'),
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.pets, color: Colors.blue[900]),
-                  ),
-                  items: _animalTypeOptions.map((String value) {
-                    return DropdownMenuItem<String>(
-                      value: value,
-                      child: Text(value),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedAnimalType = value;
-                    });
-                  },
-                ),
-                const SizedBox(height: 20),
-                InkWell(
-                  onTap: () async {
-                    final DateTime? picked = await showDatePicker(
-                      context: context,
-                      initialDate: DateTime.now().subtract(const Duration(days: 30)),
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime.now(),
-                    );
-                    if (picked != null) {
-                      setState(() {
-                        _birthDate = picked;
-                      });
-                    }
-                  },
-                  child: InputDecorator(
-                    decoration: InputDecoration(
-                      labelText: 'Birth Date',
-                      prefixIcon: Icon(Icons.calendar_today, color: Colors.blue[900]),
-                      border: OutlineInputBorder(),
-                    ),
-                    child: Text(
-                      _birthDate == null
-                          ? 'Select birth date'
-                          : "${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}",
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: _birthDate == null ? Colors.grey[600] : Colors.black,
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          TextFormField(
+                            controller: _cowIdController,
+                            decoration: InputDecoration(
+                              labelText: 'Cow ID',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.local_dining, color: Colors.blue[900]),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter Cow ID';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 20),
+                          DropdownButtonFormField<String>(
+                            value: _parentId,
+                            hint: Text('Select Parent ID (Optional)'),
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.link, color: Colors.blue[900]),
+                            ),
+                            items: _parentOptions.map((String option) {
+                              return DropdownMenuItem<String>(
+                                value: option,
+                                child: Text(option),
+                              );
+                            }).toList(),
+                            onChanged: (String? newValue) {
+                              setState(() {
+                                _parentId = newValue;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 20),
+                          DropdownButtonFormField<String>(
+                            value: _selectedGender != '' ? _selectedGender : null,
+                            hint: const Text('Select Gender'),
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.person, color: Colors.blue[900]),
+                            ),
+                            items: ['Male', 'Female'].map((String value) {
+                              return DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(value),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedGender = value;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 20),
+                          DropdownButtonFormField<String>(
+                            value: _selectedAnimalType,
+                            hint: const Text('Select Animal Type'),
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.pets, color: Colors.blue[900]),
+                            ),
+                            items: _animalTypeOptions.map((String value) {
+                              return DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(value),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedAnimalType = value;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 20),
+                          InkWell(
+                            onTap: () async {
+                              final DateTime? picked = await showDatePicker(
+                                context: context,
+                                initialDate: DateTime.now().subtract(const Duration(days: 30)),
+                                firstDate: DateTime(2000),
+                                lastDate: DateTime.now(),
+                              );
+                              if (picked != null) {
+                                setState(() {
+                                  _birthDate = picked;
+                                });
+                              }
+                            },
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                labelText: 'Birth Date',
+                                prefixIcon: Icon(Icons.calendar_today, color: Colors.blue[900]),
+                                border: OutlineInputBorder(),
+                              ),
+                              child: Text(
+                                _birthDate == null
+                                    ? 'Select birth date'
+                                    : "${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: _birthDate == null ? Colors.grey[600] : Colors.black,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton(
+                            onPressed: _isSubmitting ? null : _addSupplier,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue[900],
+                              padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                            child: _isSubmitting
+                                ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                                : const Text(
+                              'Add Supplier',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 60),
+                        ],
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: _isSubmitting ? null : _addSupplier,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[900],
-                    padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  ),
-                  child: _isSubmitting
-                      ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                  )
-                      : const Text(
-                    'Add Supplier',
-                    style: TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),

@@ -119,12 +119,16 @@ class _AddMaterialTransferScreenState extends State<AddMaterialTransferScreen> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white.withOpacity(0.9),
-        title: const Text('Add Material Transfer', style: TextStyle(color: Colors.black)),
-        iconTheme: const IconThemeData(color: Colors.black),
-        elevation: 2,
+        elevation: 4,
+        automaticallyImplyLeading: true,
+        title: const Center(
+          child: Text(
+            'Add Material Transfer',
+            style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+          ),
+        ),
       ),
       body: Container(
-        padding: const EdgeInsets.all(16.0),
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [Color(0xFFFFD700), Color(0xFFFFFF99)],
@@ -134,43 +138,93 @@ class _AddMaterialTransferScreenState extends State<AddMaterialTransferScreen> {
         ),
         child: isLoading
             ? const Center(child: CircularProgressIndicator())
-            : Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              DropdownButtonFormField<String>(
-                value: sWarehouse,
-                decoration: const InputDecoration(labelText: 'Source Warehouse'),
-                items: warehouseList.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
-                onChanged: (val) => setState(() => sWarehouse = val),
-                validator: (val) => val == null ? 'Required' : null,
-              ),
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Target Warehouse'),
-                items: warehouseList.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
-                onChanged: (val) => setState(() => tWarehouse = val),
-                validator: (val) => val == null ? 'Required' : null,
-              ),
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Item Code'),
-                items: itemList.map((i) => DropdownMenuItem(value: i, child: Text(i))).toList(),
-                onChanged: (val) => setState(() => itemCode = val),
-                validator: (val) => val == null ? 'Required' : null,
-              ),
-              TextFormField(
-                decoration: const InputDecoration(labelText: 'Quantity'),
-                keyboardType: TextInputType.number,
-                onSaved: (val) => qty = val,
-                validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[900]),
-                onPressed: submitTransfer,
-                child: const Text('Submit', style: TextStyle(color: Colors.white)),
-              ),
-            ],
+            : Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              children: [
+                DropdownButtonFormField<String>(
+                  value: sWarehouse,
+                  decoration: InputDecoration(
+                    labelText: 'Source Warehouse',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.warehouse, color: Colors.blue[900]),
+                  ),
+                  items: warehouseList.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
+                  onChanged: (val) => setState(() => sWarehouse = val),
+                  validator: (val) => val == null ? 'Required' : null,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  decoration: InputDecoration(
+                    labelText: 'Target Warehouse',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.move_to_inbox, color: Colors.blue[900]),
+                  ),
+                  items: warehouseList.map((w) => DropdownMenuItem(value: w, child: Text(w))).toList(),
+                  onChanged: (val) => setState(() => tWarehouse = val),
+                  validator: (val) => val == null ? 'Required' : null,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  decoration: InputDecoration(
+                    labelText: 'Item Code',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.qr_code, color: Colors.blue[900]),
+                  ),
+                  items: itemList.map((i) => DropdownMenuItem(value: i, child: Text(i))).toList(),
+                  onChanged: (val) => setState(() => itemCode = val),
+                  validator: (val) => val == null ? 'Required' : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  decoration: InputDecoration(
+                    labelText: 'Quantity',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.scale, color: Colors.blue[900]),
+                  ),
+                  keyboardType: TextInputType.number,
+                  onSaved: (val) => qty = val,
+                  validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: submitTransfer,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[900],
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text(
+                    'Submit',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
           ),
+        ),
+      ),
+      bottomNavigationBar: Container(
+        color: Colors.blue[900],
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.home, color: Colors.white, size: 30),
+              onPressed: () {
+                Navigator.pushNamed(context, '/home');
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.info, color: Colors.white, size: 30),
+              onPressed: () {
+                Navigator.pushNamed(context, '/about');
+              },
+            ),
+          ],
         ),
       ),
     );
