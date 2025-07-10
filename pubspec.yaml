@@ -61,7 +61,7 @@ flutter:
     - assets/slider1.jpg
     - assets/slider2.jpg
     - assets/slider3.jpg
-    - assets/cow-logo.jpg
+    - assets/cow-logo.png
 
   uses-material-design: true
 

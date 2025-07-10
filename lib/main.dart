@@ -4,6 +4,7 @@ import 'package:gaushala/Screens/add_supplier_screen.dart';
 import 'package:gaushala/Screens/collection_screen.dart';
 import 'package:gaushala/Screens/homescreen.dart';
 import 'package:gaushala/Screens/loginpage.dart';
+import 'package:gaushala/Screens/material_transfer_screen.dart';
 import 'package:gaushala/Screens/report_screen.dart';
 import 'package:gaushala/Screens/supplier_screen.dart';
 
@@ -33,7 +34,8 @@ class GaushalaApp extends StatelessWidget {
         '/report': (context) => const ReportScreen(),
         '/about': (context) => const PlaceholderScreen(title: 'About Page'),
         '/dashboard': (context) => const PlaceholderScreen(title: 'Dashboard Page'),
-        '/add_supplier': (context) => AddSupplierScreen(refreshSupplierList: () {}), // Default empty function
+        '/add_supplier': (context) => AddSupplierScreen(refreshSupplierList: () {}),
+        '/material_transfer': (context) => const MaterialTransferScreen(),
       },
     );
   }

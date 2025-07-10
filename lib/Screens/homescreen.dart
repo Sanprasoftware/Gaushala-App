@@ -15,6 +15,10 @@ class _HomeScreenState extends State<HomeScreen> {
   final _storage = const FlutterSecureStorage();
   double _totalInQty = 0.0;
   String _userFullName = '';
+  int _maleCount = 0;
+  int _femaleCount = 0;
+  Map<String, int> _speciesCounts = {};
+
 
   final List<String> _sliderImages = [
     'assets/slider1.jpg',
@@ -31,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchTotalInQty();
     _startImageRotation();
     _loadUserFullName();
+    _fetchSupplierSummary();
   }
 
   Future<void> _loadUserFullName() async {
@@ -57,51 +62,82 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> _fetchTotalInQty() async {
-    final String apiUrl = 'https://goshala.erpkey.in/api/method/frappe.desk.query_report.run';
-    final apiKey = await _storage.read(key: 'api_key');
-    final apiSecret = await _storage.read(key: 'api_secret');
-
-    final uri = Uri.parse(apiUrl).replace(
-      queryParameters: {
-        'report_name': 'Stock Balance',
-        'ignore_prepared_report': 'false',
-        'are_default_filters': 'true',
-        '_': DateTime.now().millisecondsSinceEpoch.toString(),
-      },
+  Future<void> _fetchSupplierSummary() async {
+    final uri = Uri.parse(
+      'https://goshala.erpkey.in/api/resource/Supplier?fields=["custom_gender","custom_animal_type"]&limit_page_length=1000',
     );
 
     try {
+      final apiKey = await _storage.read(key: "api_key") ?? "";
+      final apiSecret = await _storage.read(key: "api_secret") ?? "";
+
       final response = await http.get(
         uri,
         headers: {
           'Authorization': 'token $apiKey:$apiSecret',
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
         },
       );
 
-      print('STATUS: ${response.statusCode}');
-      print('BODY: ${response.body}');
-
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final List<dynamic> results = data['message']['result'] ?? [];
-        double total = 0.0;
+        final data = json.decode(response.body);
+        final List<dynamic> suppliers = data['data'] ?? [];
 
-        for (var item in results) {
-          if (item is Map && item['in_qty'] != null) {
-            total += (item['in_qty'] as num).toDouble();
+        int male = 0;
+        int female = 0;
+        Map<String, int> speciesMap = {};
+
+        for (var s in suppliers) {
+          final gender = (s['custom_gender'] ?? '').toString().trim().toLowerCase();
+          final species = (s['custom_animal_type'] ?? '').toString().trim();
+
+          if (gender == 'male') male++;
+          if (gender == 'female') female++;
+
+          if (species.isNotEmpty) {
+            speciesMap[species] = (speciesMap[species] ?? 0) + 1;
           }
         }
 
         if (mounted) {
           setState(() {
-            _totalInQty = total > 0 ? total : 0.0;
+            _maleCount = male;
+            _femaleCount = female;
+            _speciesCounts = speciesMap;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching supplier summary: $e');
+    }
+  }
+
+  Future<void> _fetchTotalInQty() async {
+    final String apiUrl =
+        'https://goshala.erpkey.in/api/method/goshala_sanpra.custom_pyfile.login_master.get_total_stock_qty?item_code=Cow';
+
+    try {
+      final String apiSecret = await _storage.read(key: "api_secret") ?? "";
+      final String apiKey = await _storage.read(key: "api_key") ?? "";
+
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'token $apiKey:$apiSecret',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final double qty = (data['message']['total_qty'] ?? 0.0).toDouble();
+        if (mounted) {
+          setState(() {
+            _totalInQty = qty;
           });
         }
       } else {
-        throw Exception('Failed to fetch total in qty');
+        throw Exception('Failed to fetch total stock qty');
       }
     } catch (e) {
       if (mounted) {
@@ -109,11 +145,14 @@ class _HomeScreenState extends State<HomeScreen> {
           _totalInQty = 0.0;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error fetching total in qty: $e')),
+          SnackBar(content: Text('Error fetching stock qty: $e')),
         );
       }
     }
   }
+
+
+
 
 
   Future<void> _logout() async {
@@ -177,25 +216,41 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             const SizedBox(height: 20),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+              child: Row(
                 children: [
-                  Text(
-                    'Hello, $_userFullName',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
+                  const Icon(
+                    Icons.account_circle,
+                    size: 40,
+                    color: Colors.blueGrey,
                   ),
-                  const SizedBox(height: 5),
-                  const Text(
-                    'Welcome to Gaushala App',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.blueGrey,
-                    ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hello, $_userFullName',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: const [
+                          Icon(Icons.location_on, size: 14, color: Colors.blueGrey),
+                          SizedBox(width: 4),
+                          Text(
+                            'Welcome To संवेदना गौशाळा',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.blueGrey,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -264,54 +319,119 @@ class _HomeScreenState extends State<HomeScreen> {
                   side: BorderSide(color: Colors.blue[900]!.withOpacity(0.3), width: 1),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(15.0),
-                  child: Row(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Image.asset(
-                        'assets/cow.png',
-                        height: 50,
-                        width: 50,
-                        errorBuilder: (context, error, stackTrace) =>
-                        const Icon(Icons.agriculture, color: Colors.green, size: 50),
-                      ),
-                      const SizedBox(width: 10),
-                      Column(
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
-                            'Total Collection',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
+                        children: [
+                          Image.asset(
+                            'assets/cow-logo.png',
+                            height: 50,
+                            width: 50,
+                            errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.agriculture, color: Colors.green, size: 50),
                           ),
-                          SizedBox(height: 5),
-                          Text(
-                            'Total In Qty (Litres)',
-                            style: TextStyle(fontSize: 14, color: Colors.blueGrey),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text(
+                                      'Total Qty (Litres): ',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(
+                                      '$_totalInQty L',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    const Text(
+                                      'Male: ',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(
+                                      '$_maleCount',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.indigo,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 5),
+                                Row(
+                                  children: [
+                                    const Text(
+                                      'Total Animals: ',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(
+                                      '${_maleCount + _femaleCount}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    const Text(
+                                      'Female: ',
+                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                    ),
+                                    Text(
+                                      '$_femaleCount',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.pink,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFFE4B5),
-                          borderRadius: BorderRadius.all(Radius.circular(10)),
-                        ),
-                        child: Text(
-                          '$_totalInQty L',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.green,
-                          ),
-                        ),
+                      const Divider(height: 20, thickness: 1),
+                      GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                        childAspectRatio: 4.5,
+                        children: _speciesCounts.entries.map((entry) {
+                          return Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.yellow[100],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.amber),
+                            ),
+                            child: Text(
+                              '${entry.key} = ${entry.value}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          );
+                        }).toList(),
                       ),
                     ],
                   ),
                 ),
+
+
+
+
               ),
             ),
             const SizedBox(height: 40),
@@ -323,6 +443,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _buildIcon(Icons.store, 'Supplier', '/supplier', Colors.blue[900]!),
                 _buildIcon(Icons.money, 'Collection', '/collection', Colors.blue[900]!),
                 _buildIcon(Icons.description, 'Report', '/report', Colors.blue[900]!),
+                _buildIcon(Icons.swap_horiz, 'Material', '/material_transfer', Colors.blue[900]!),
               ],
             ),
 

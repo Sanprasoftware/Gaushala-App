@@ -24,8 +24,7 @@ class _SupplierScreenState extends State<SupplierScreen> {
   Future<void> fetchSuppliers() async {
     final String? token = await getToken(); // Get token from LoginPage
     print('Fetched Token: $token'); // Debug: Log the token
-    const String apiUrl = 'https://goshala.erpkey.in/api/resource/Supplier';
-
+    const String apiUrl = 'https://goshala.erpkey.in/api/resource/Supplier?fields=["name","custom_animal_type","custom_age_months","custom_supplier_parent"]';
     if (token == null || token.isEmpty) {
       print('Error: Token is null or empty'); // Debug: Log token issue
       setState(() {
@@ -120,24 +119,87 @@ class _SupplierScreenState extends State<SupplierScreen> {
                 'Unknown';
             return Card(
               elevation: 4,
-              color: Colors.white.withOpacity(0.85),
+              margin: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 10.0),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.blue[900]!.withOpacity(0.3), width: 1),
               ),
-              margin: const EdgeInsets.symmetric(vertical: 8.0),
-              child: ListTile(
-                title: Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
-                  ),
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Supplier Icon
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.blue[50],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.all(10),
+                      child: Icon(Icons.store, color: Colors.blue[900], size: 30),
+                    ),
+                    const SizedBox(width: 12),
+
+                    // Supplier Info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Row 1: Name + Animal
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  supplier['name'] ?? 'Unknown',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                              if (supplier['custom_animal_type'] != null)
+                                Expanded(
+                                  child: Text(
+                                    "🐄 ${supplier['custom_animal_type']}",
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                  ),
+                                ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 6),
+
+                          // Row 2: Age + Parent
+                          Row(
+                            children: [
+                              if (supplier['custom_age_months'] != null)
+                                Expanded(
+                                  child: Text(
+                                    "📆 ${supplier['custom_age_months']}",
+                                    style: const TextStyle(fontSize: 13, color: Colors.black54),
+                                  ),
+                                ),
+                              if (supplier['custom_supplier_parent'] != null)
+                                Expanded(
+                                  child: Text(
+                                    "👤 ${supplier['custom_supplier_parent']}",
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(fontSize: 13, color: Colors.black54),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                leading: Icon(Icons.store, color: Colors.blue[900]),
               ),
             );
+
+
+
           },
         ),
       ),

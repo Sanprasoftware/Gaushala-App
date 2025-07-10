@@ -13,11 +13,16 @@ class AddSupplierScreen extends StatefulWidget {
   State<AddSupplierScreen> createState() => _AddSupplierScreenState();
 }
 
+DateTime? _birthDate;
+
 class _AddSupplierScreenState extends State<AddSupplierScreen> {
   final _formKey = GlobalKey<FormState>();
   final _cowIdController = TextEditingController();
   String? _parentId;
   List<String> _parentOptions = [];
+  String? _selectedGender;
+  String? _selectedAnimalType;
+  List<String> _animalTypeOptions = [];
   bool _isLoading = true;
   bool _isSubmitting = false;
 
@@ -40,45 +45,44 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
     }
 
     try {
-      const String apiUrl = 'https://goshala.erpkey.in/api/resource/Supplier';
-      final uri = Uri.parse(apiUrl).replace(
-        queryParameters: {
-          'fields': jsonEncode(['name']),
-        },
-      );
+      final supplierUri = Uri.parse('https://goshala.erpkey.in/api/resource/Supplier')
+          .replace(queryParameters: {'fields': jsonEncode(['name'])});
+      final animalUri = Uri.parse('https://goshala.erpkey.in/api/resource/Animal%20Master')
+          .replace(queryParameters: {'fields': jsonEncode(['name'])});
 
-      final response = await http.get(
-        uri,
-        headers: {
-          'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38', // 👈 Hardcoded just for demo, ideally use `token`
-          'Content-Type': 'application/json',
-        },
-      );
+      final supplierRes = await http.get(supplierUri, headers: {
+        'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
+        'Content-Type': 'application/json',
+      });
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List<dynamic> suppliers = data['data'] ?? [];
+      final animalRes = await http.get(animalUri, headers: {
+        'Authorization': 'token 22b5fcceeb021c0:353246dbfcc9d38',
+        'Content-Type': 'application/json',
+      });
+
+      if (supplierRes.statusCode == 200 && animalRes.statusCode == 200) {
+        final supplierData = json.decode(supplierRes.body);
+        final animalData = json.decode(animalRes.body);
+
         setState(() {
-          _parentOptions = suppliers.map((s) => s['name'] as String).toList();
+          _parentOptions = (supplierData['data'] as List).map((s) => s['name'] as String).toList();
+          _animalTypeOptions = (animalData['data'] as List).map((a) => a['name'] as String).toList();
           _isLoading = false;
         });
       } else {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${response.body}')),
+          const SnackBar(content: Text('Failed to fetch data')),
         );
-        setState(() {
-          _isLoading = false;
-        });
       }
     } catch (e) {
+      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to fetch parent options')),
+        const SnackBar(content: Text('Error fetching dropdown options')),
       );
-      setState(() {
-        _isLoading = false;
-      });
     }
   }
+
 
 
   Future<void> _addSupplier() async {
@@ -87,7 +91,7 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
         _isSubmitting = true;
       });
 
-      final String? token = await getToken(); // e.g. "22b5fcceeb021c0:474c875b6ca3f6c"
+      final String? token = await getToken();
 
       if (token == null || token.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -101,6 +105,15 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
 
       try {
         const String apiUrl = 'https://goshala.erpkey.in/api/resource/Supplier';
+        if (_birthDate == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select birth date')),
+          );
+          setState(() {
+            _isSubmitting = false;
+          });
+          return;
+        }
 
         final response = await http.post(
           Uri.parse(apiUrl),
@@ -111,6 +124,12 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
           body: jsonEncode({
             'supplier_name': _cowIdController.text.trim(),
             'custom_supplier_parent': _parentId,
+            'custom_gender': _selectedGender ?? '',
+            'custom_animal_type': _selectedAnimalType,
+            'custom_is_animal': 1,
+            'custom_birth_date': _birthDate != null
+                ? "${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}"
+                : null,
           }),
         );
 
@@ -220,7 +239,81 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
                     });
                   },
                 ),
-                const SizedBox(height: 30),
+                const SizedBox(height: 20),
+                // const SizedBox(height: 20),
+                DropdownButtonFormField<String>(
+                  value: _selectedGender != '' ? _selectedGender : null,
+                  hint: const Text('Select Gender'),
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person, color: Colors.blue[900]),
+                  ),
+                  items: ['Male', 'Female'].map((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedGender = value;
+                    });
+                  },
+                ),
+
+                const SizedBox(height: 20),
+                DropdownButtonFormField<String>(
+                  value: _selectedAnimalType,
+                  hint: const Text('Select Animal Type'),
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.pets, color: Colors.blue[900]),
+                  ),
+                  items: _animalTypeOptions.map((String value) {
+                    return DropdownMenuItem<String>(
+                      value: value,
+                      child: Text(value),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedAnimalType = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 20),
+                InkWell(
+                  onTap: () async {
+                    final DateTime? picked = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now().subtract(const Duration(days: 30)),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _birthDate = picked;
+                      });
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'Birth Date',
+                      prefixIcon: Icon(Icons.calendar_today, color: Colors.blue[900]),
+                      border: OutlineInputBorder(),
+                    ),
+                    child: Text(
+                      _birthDate == null
+                          ? 'Select birth date'
+                          : "${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}",
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: _birthDate == null ? Colors.grey[600] : Colors.black,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: _isSubmitting ? null : _addSupplier,
                   style: ElevatedButton.styleFrom(
