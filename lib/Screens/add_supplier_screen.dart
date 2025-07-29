@@ -25,12 +25,32 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
   List<String> _animalTypeOptions = [];
   bool _isLoading = true;
   bool _isSubmitting = false;
+  Map? _existingSupplier;
+  bool _isEdit = false;
 
   @override
   void initState() {
     super.initState();
     _fetchParentOptions();
+
+    // Delay to ensure context is available
+    Future.delayed(Duration.zero, () {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args != null && args is Map) {
+        setState(() {
+          _isEdit = true;
+          _existingSupplier = args;
+
+          _cowIdController.text = _existingSupplier!['name'] ?? '';
+          _selectedAnimalType = _existingSupplier!['custom_animal_type'];
+          _selectedGender = _existingSupplier!['custom_gender'];
+          _parentId = _existingSupplier!['custom_supplier_parent'];
+          // Birth date optional — not available from list, skip or handle separately
+        });
+      }
+    });
   }
+
 
   Future<String?> getToken() async {
     final FlutterSecureStorage storage = FlutterSecureStorage();
@@ -91,113 +111,81 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
 
 
 
-  Future<void> _addSupplier() async {
+  Future<void> _submitSupplier() async {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isSubmitting = true;
-      });
+      setState(() => _isSubmitting = true);
 
       final String? token = await getToken();
-
       if (token == null || token.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Authentication token not found')),
         );
-        setState(() {
-          _isSubmitting = false;
-        });
+        setState(() => _isSubmitting = false);
         return;
       }
 
+      final supplierData = {
+        'supplier_name': _cowIdController.text.trim(),
+        'custom_supplier_parent': _parentId,
+        'custom_gender': _selectedGender ?? '',
+        'custom_animal_type': _selectedAnimalType,
+        'custom_is_animal': 1,
+        'custom_birth_date': _birthDate != null
+            ? "${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}"
+            : null,
+      };
+
       try {
-        const String apiUrl = 'https://goshala.erpkey.in/api/resource/Supplier';
-        if (_birthDate == null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Please select birth date')),
+        late http.Response response;
+
+        if (_isEdit) {
+          final name = _existingSupplier!['name'];
+          final url = 'https://goshala.erpkey.in/api/resource/Supplier/$name';
+
+          response = await http.put(
+            Uri.parse(url),
+            headers: {
+              'Authorization': token,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'data': supplierData}),
           );
-          setState(() {
-            _isSubmitting = false;
-          });
-          return;
+        } else {
+          const url = 'https://goshala.erpkey.in/api/resource/Supplier';
+          response = await http.post(
+            Uri.parse(url),
+            headers: {
+              'Authorization': token,
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(supplierData),
+          );
         }
-
-        final response = await http.post(
-          Uri.parse(apiUrl),
-          headers: {
-            'Authorization': token,
-            'Content-Type': 'application/json',
-          },
-          body: jsonEncode({
-            'supplier_name': _cowIdController.text.trim(),
-            'custom_supplier_parent': _parentId,
-            'custom_gender': _selectedGender ?? '',
-            'custom_animal_type': _selectedAnimalType,
-            'custom_is_animal': 1,
-            'custom_birth_date': _birthDate != null
-                ? "${_birthDate!.year}-${_birthDate!.month.toString().padLeft(2, '0')}-${_birthDate!.day.toString().padLeft(2, '0')}"
-                : null,
-          }),
-        );
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          // Extract the supplier name (if available in response)
-          final responseBody = jsonDecode(response.body);
-          final String supplierName = responseBody['data']?['name'];
-
-          if (supplierName.isNotEmpty) {
-            // Call the age update method
-            final updateResponse = await http.post(
-              Uri.parse('https://goshala.erpkey.in/api/method/goshala_sanpra.custom_pyfile.cal_age.update_supplier_age'),
-              headers: {
-                'Authorization': token,
-                'Content-Type': 'application/json',
-              },
-              body: jsonEncode({'name': supplierName}),
-            );
-
-            if (updateResponse.statusCode == 200) {
-              print("Age update successful");
-            } else {
-              print("Failed to update age: ${updateResponse.body}");
-            }
-          }
-        }
-
-
-        print('Add Supplier Response Status: ${response.statusCode}');
-        print('Add Supplier Response Body: ${response.body}');
 
         if (response.statusCode == 200 || response.statusCode == 201) {
           widget.refreshSupplierList();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Supplier added successfully')),
+            SnackBar(content: Text(_isEdit ? 'Supplier updated successfully' : 'Supplier added successfully')),
           );
-          _cowIdController.clear();
-          setState(() {
-            _parentId = null;
-          });
           Navigator.pop(context);
         } else {
           final responseBody = jsonDecode(response.body);
-          String errorMsg = responseBody['exception'] ?? 'Failed to add supplier';
+          String errorMsg = responseBody['exception'] ?? 'Operation failed';
           if (errorMsg.contains('Duplicate entry')) {
-            errorMsg = 'Supplier name already registered';
+            errorMsg = 'Supplier name already exists';
           }
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(errorMsg)),
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMsg)));
         }
       } catch (e) {
-        print('Exception Caught: $e');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Error adding supplier')),
+          SnackBar(content: Text('Error: $e')),
         );
       } finally {
-        setState(() {
-          _isSubmitting = false;
-        });
+        setState(() => _isSubmitting = false);
       }
     }
   }
+
 
   @override
   void dispose() {
@@ -244,6 +232,7 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
                         children: [
                           TextFormField(
                             controller: _cowIdController,
+                            readOnly: _isEdit, // <-- Make Cow ID read-only when editing
                             decoration: InputDecoration(
                               labelText: 'Cow ID',
                               border: OutlineInputBorder(),
@@ -350,7 +339,7 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
                           ),
                           const SizedBox(height: 20),
                           ElevatedButton(
-                            onPressed: _isSubmitting ? null : _addSupplier,
+                            onPressed: _isSubmitting ? null : _submitSupplier,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue[900],
                               padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
@@ -367,9 +356,9 @@ class _AddSupplierScreenState extends State<AddSupplierScreen> {
                                 strokeWidth: 2,
                               ),
                             )
-                                : const Text(
-                              'Add Supplier',
-                              style: TextStyle(
+                                : Text(
+                              _isEdit ? 'Update Supplier' : 'Add Supplier',
+                              style: const TextStyle(
                                 fontSize: 18,
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,

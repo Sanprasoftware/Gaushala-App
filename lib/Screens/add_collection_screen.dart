@@ -17,6 +17,8 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
   String? _selectedSupplier;
   List<String> _supplierList = [];
   final TextEditingController _qtyController = TextEditingController();
+  List<String> _milkItems = [];
+  String? _selectedItem;
 
 
   bool _isLoading = true;
@@ -26,7 +28,9 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
   void initState() {
     super.initState();
     _fetchSuppliers();
+    _fetchMilkItems();
   }
+
 
   Future<String?> getToken() async {
     final FlutterSecureStorage storage = FlutterSecureStorage();
@@ -43,6 +47,10 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
       const apiUrl = 'https://goshala.erpkey.in/api/resource/Supplier';
       final uri = Uri.parse(apiUrl).replace(queryParameters: {
         'fields': jsonEncode(['name']),
+        'filters': jsonEncode([
+          ['custom_is_animal', '=', 1],
+          ['custom_is_collection', '=', 1]
+        ]),
       });
 
       final response = await http.get(
@@ -76,14 +84,20 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
   }
 
 
-
-  Future<Map<String, String>?> _fetchItemAndWarehouse() async {
+  Future<void> _fetchMilkItems() async {
     final token = await getToken();
 
-    const url = 'https://goshala.erpkey.in/api/resource/Goshala%20Setting/Goshala%20Setting';
+    final uri = Uri.parse('https://goshala.erpkey.in/api/resource/Item').replace(
+      queryParameters: {
+        'fields': jsonEncode(['name']),
+        'filters': jsonEncode([
+          ['custom_is_milk', '=', 1]
+        ]),
+      },
+    );
 
     final response = await http.get(
-      Uri.parse(url),
+      uri,
       headers: {
         'Authorization': token ?? '',
         'Content-Type': 'application/json',
@@ -92,14 +106,43 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return {
-        'item_code': data['data']['purchase_item'],
-        'warehouse': data['data']['purchase_warehouse'],
-      };
+      final items = data['data'] as List<dynamic>;
+      setState(() {
+        _milkItems = items.map((item) => item['name'].toString()).toList();
+        if (_milkItems.isNotEmpty) _selectedItem = _milkItems.first;
+      });
     } else {
-      print('Error fetching item/warehouse: ${response.body}');
-      return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to fetch milk items')),
+      );
     }
+  }
+
+
+  Future<String?> _fetchWarehouse() async {
+    final token = await getToken();
+
+    final uri = Uri.parse(
+        'https://goshala.erpkey.in/api/resource/Goshala Setting/Goshala Setting');
+
+    final response = await http.get(
+      uri,
+      headers: {
+        'Authorization': token ?? '',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      print("Goshala Setting: $data");
+      final warehouse = data['data']['purchase_warehouse'];
+      return warehouse;
+    } else {
+      print("Warehouse fetch failed: ${response.body}");
+    }
+
+    return null;
   }
 
 
@@ -110,10 +153,13 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
       _isSubmitting = true;
     });
 
-    final setting = await _fetchItemAndWarehouse();
-    if (setting == null) {
+    final String? itemCode = _selectedItem;
+    final String? warehouse = await _fetchWarehouse();
+    print("Selected item: $itemCode");
+    print("Fetched warehouse: $warehouse");
+    if (itemCode == null || warehouse == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to fetch item & warehouse')),
+        const SnackBar(content: Text('Failed to fetch item or warehouse')),
       );
       setState(() {
         _isSubmitting = false;
@@ -121,8 +167,6 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
       return;
     }
 
-    final String itemCode = setting['item_code']!;
-    final String warehouse = setting['warehouse']!;
     final String supplier = _selectedSupplier!;
     final String qty = _qtyController.text.trim();
 
@@ -131,6 +175,7 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
     final body = jsonEncode({
       'supplier': supplier,
       "docstatus": 1,
+      "custom_mobile_entry":1,
       'posting_date':
       '${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}',
       'items': [
@@ -275,6 +320,30 @@ class _AddCollectionScreenState extends State<AddCollectionScreen> {
                   },
                   validator: (value) {
                     if (value == null) return 'Please select Cow ID';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 20),
+                DropdownButtonFormField<String>(
+                  value: _selectedItem,
+                  hint: const Text('Select Milk Item'),
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.local_drink, color: Colors.blue[900]),
+                  ),
+                  items: _milkItems.map((String item) {
+                    return DropdownMenuItem<String>(
+                      value: item,
+                      child: Text(item),
+                    );
+                  }).toList(),
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      _selectedItem = newValue;
+                    });
+                  },
+                  validator: (value) {
+                    if (value == null) return 'Please select a milk item';
                     return null;
                   },
                 ),

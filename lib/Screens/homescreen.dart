@@ -17,7 +17,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _userFullName = '';
   int _maleCount = 0;
   int _femaleCount = 0;
-  Map<String, int> _speciesCounts = {};
+  Map<String, Map<String, int>> _speciesCounts = {};
+  bool _isLoading = true;
 
   final List<String> _sliderImages = [
     'assets/slider1.jpg',
@@ -31,17 +32,24 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchTotalInQty();
+    _fetchData();
     _startImageRotation();
     _loadUserFullName();
-    _fetchSupplierSummary();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    await Future.wait([_fetchTotalInQty(), _fetchSupplierSummary()]);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _loadUserFullName() async {
     final name = await _storage.read(key: 'full_name');
     if (mounted) {
       setState(() {
-        _userFullName = name ?? 'User'; // fallback if null
+        _userFullName = name ?? 'User';
       });
     }
   }
@@ -84,19 +92,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
         int male = 0;
         int female = 0;
-        Map<String, int> speciesMap = {};
+        Map<String, Map<String, int>> speciesMap = {};
 
         for (var s in suppliers) {
-          final gender =
-              (s['custom_gender'] ?? '').toString().trim().toLowerCase();
+          final gender = (s['custom_gender'] ?? '').toString().trim().toLowerCase();
           final species = (s['custom_animal_type'] ?? '').toString().trim();
 
-          if (gender == 'male') male++;
-          if (gender == 'female') female++;
+          if (species.isEmpty) continue;
 
-          if (species.isNotEmpty) {
-            speciesMap[species] = (speciesMap[species] ?? 0) + 1;
+          speciesMap.putIfAbsent(species, () => {'male': 0, 'female': 0, 'total': 0});
+
+          if (gender == 'male') {
+            speciesMap[species]!['male'] = speciesMap[species]!['male']! + 1;
+            male++;
           }
+          if (gender == 'female') {
+            speciesMap[species]!['female'] = speciesMap[species]!['female']! + 1;
+            female++;
+          }
+
+          speciesMap[species]!['total'] = speciesMap[species]!['total']! + 1;
         }
 
         if (mounted) {
@@ -109,6 +124,11 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       print('Error fetching supplier summary: $e');
+      if (mounted) {
+        setState(() {
+          _speciesCounts = {};
+        });
+      }
     }
   }
 
@@ -116,6 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final String apiUrl =
         'https://goshala.erpkey.in/api/method/goshala_sanpra.custom_pyfile.login_master.get_total_stock_qty?item_code=Cow&warehouse=Finished%20Goods%20-%20SSS%20-%20G';
 
+    setState(() => _totalInQty = 0.0);
     try {
       final String apiSecret = await _storage.read(key: "api_secret") ?? "";
       final String apiKey = await _storage.read(key: "api_key") ?? "";
@@ -144,9 +165,9 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _totalInQty = 0.0;
         });
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error fetching stock qty: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load stock quantity: $e')),
+        );
       }
     }
   }
@@ -154,32 +175,33 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _logout() async {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Logout'),
-            content: const Text('Are you sure you want to log out?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('No'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  await _storage.delete(key: 'api_key');
-                  await _storage.delete(key: 'api_secret');
-                  Navigator.of(
-                    context,
-                  ).pushNamedAndRemoveUntil('/login', (route) => false);
-                },
-                child: const Text('Yes'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('No'),
           ),
+          TextButton(
+            onPressed: () async {
+              await _storage.delete(key: 'api_key');
+              await _storage.delete(key: 'api_secret');
+              Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+            },
+            child: const Text('Yes'),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.white.withOpacity(0.9),
@@ -192,9 +214,8 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Image.asset(
             'assets/logo.png',
             height: 100,
-            errorBuilder:
-                (context, error, stackTrace) =>
-                    const Icon(Icons.error, color: Colors.red, size: 30),
+            errorBuilder: (context, error, stackTrace) =>
+            const Icon(Icons.error, color: Colors.red, size: 30),
           ),
         ),
         actions: [
@@ -206,7 +227,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          Expanded(
+          Flexible(
             child: Container(
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
@@ -221,12 +242,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 20),
-                    // Your existing widgets inside Column (from Padding -> Row -> Cards etc.)
                     Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16.0,
-                        vertical: 8,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
                       child: Row(
                         children: [
                           const Icon(
@@ -269,10 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 10),
-
-                    // Animated Image Slider
                     Container(
                       height: 200,
                       margin: const EdgeInsets.symmetric(horizontal: 10),
@@ -299,15 +313,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         borderRadius: BorderRadius.circular(13),
                         child: AnimatedSwitcher(
                           duration: const Duration(seconds: 1),
-                          transitionBuilder: (
-                            Widget child,
-                            Animation<double> animation,
-                          ) {
+                          transitionBuilder: (Widget child, Animation<double> animation) {
                             final offsetAnimation = Tween<Offset>(
-                              begin: const Offset(1.0, 0.0), // Slide from right
+                              begin: const Offset(1.0, 0.0),
                               end: Offset.zero,
                             ).animate(animation);
-
                             return FadeTransition(
                               opacity: animation,
                               child: SlideTransition(
@@ -318,9 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                           child: Image.asset(
                             _sliderImages[_currentImageIndex],
-                            key: ValueKey<String>(
-                              _sliderImages[_currentImageIndex],
-                            ),
+                            key: ValueKey<String>(_sliderImages[_currentImageIndex]),
                             fit: BoxFit.cover,
                             width: double.infinity,
                             errorBuilder: (context, error, stackTrace) {
@@ -335,10 +343,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 20),
-
-                    // Total Collection Card
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0),
                       child: Card(
@@ -363,27 +368,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                     'assets/cow-logo.png',
                                     height: 50,
                                     width: 50,
-                                    errorBuilder:
-                                        (context, error, stackTrace) =>
-                                            const Icon(
-                                              Icons.agriculture,
-                                              color: Colors.green,
-                                              size: 50,
-                                            ),
+                                    errorBuilder: (context, error, stackTrace) =>
+                                    const Icon(
+                                      Icons.agriculture,
+                                      color: Colors.green,
+                                      size: 50,
+                                    ),
                                   ),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
                                             const Text(
                                               'Total Qty (Litres): ',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                              ),
+                                              style: TextStyle(fontWeight: FontWeight.bold),
                                             ),
                                             Text(
                                               '$_totalInQty L',
@@ -395,9 +396,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                             const Spacer(),
                                             const Text(
                                               'Male: ',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                              ),
+                                              style: TextStyle(fontWeight: FontWeight.bold),
                                             ),
                                             Text(
                                               '$_maleCount',
@@ -413,9 +412,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           children: [
                                             const Text(
                                               'Total Animals: ',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                              ),
+                                              style: TextStyle(fontWeight: FontWeight.bold),
                                             ),
                                             Text(
                                               '${_maleCount + _femaleCount}',
@@ -427,9 +424,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                             const Spacer(),
                                             const Text(
                                               'Female: ',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                              ),
+                                              style: TextStyle(fontWeight: FontWeight.bold),
                                             ),
                                             Text(
                                               '$_femaleCount',
@@ -446,83 +441,96 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ],
                               ),
                               const Divider(height: 20, thickness: 1),
-                              GridView.count(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 10,
-                                mainAxisSpacing: 10,
-                                childAspectRatio: 4.5,
-                                children:
-                                    _speciesCounts.entries.map((entry) {
-                                      return Container(
-                                        alignment: Alignment.center,
-                                        decoration: BoxDecoration(
-                                          color: Colors.yellow[100],
-                                          borderRadius: BorderRadius.circular(
-                                            8,
+                              SizedBox(
+                                height: MediaQuery.of(context).size.height * 0.1, // adjust as needed
+                                child: GridView.count(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 8,
+                                  mainAxisSpacing: 8,
+                                  childAspectRatio: 2.2,
+                                  shrinkWrap: true,
+                                  physics: NeverScrollableScrollPhysics(),
+                                  children: _speciesCounts.entries.map((entry) {
+                                    final species = entry.key;
+                                    final counts = entry.value;
+                                    final total = counts['total'] ?? 0;
+                                    final male = counts['male'] ?? 0;
+                                    final female = counts['female'] ?? 0;
+
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber[50],
+                                        border: Border.all(color: Colors.amber.shade300),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            '$species = $total',
+                                            style: const TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.brown,
+                                            ),
+                                            textAlign: TextAlign.center,
                                           ),
-                                          border: Border.all(
-                                            color: Colors.amber,
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  const Text(
+                                                    'M: ',
+                                                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                                                  ),
+                                                  Text('$male'),
+                                                ],
+                                              ),
+                                              Row(
+                                                children: [
+                                                  const Text(
+                                                    'F: ',
+                                                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.pink),
+                                                  ),
+                                                  Text('$female'),
+                                                ],
+                                              ),
+                                            ],
                                           ),
-                                        ),
-                                        child: Text(
-                                          '${entry.key} = ${entry.value}',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      );
-                                    }).toList(),
-                              ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              )
                             ],
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 40),
-
-                    // Navigation Icons
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 45.0),
                       child: GridView.count(
-                        crossAxisCount: 4, // 3 items per row
+                        crossAxisCount: 3,
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        crossAxisSpacing: 4,
-                        mainAxisSpacing: 5, // ✅ reduce vertical spacing here
+                        crossAxisSpacing: 15,
+                        mainAxisSpacing: 3,
                         childAspectRatio: 0.85,
                         children: [
-                          _buildIcon(
-                            Icons.store,
-                            'Supplier',
-                            '/supplier',
-                            Colors.blue[900]!,
-                          ),
-                          _buildIcon(
-                            Icons.money,
-                            'Collection',
-                            '/collection',
-                            Colors.blue[900]!,
-                          ),
-                          _buildIcon(
-                            Icons.description,
-                            'Report',
-                            '/report',
-                            Colors.blue[900]!,
-                          ),
-                          _buildIcon(
-                            Icons.swap_horiz,
-                            'Material',
-                            '/material_transfer',
-                            Colors.blue[900]!,
-                          ),
+                          _buildIcon(Icons.store, 'Cow', '/supplier', Colors.blue[900]!),
+                          _buildIcon(Icons.money, 'Collection', '/collection', Colors.blue[900]!),
+                          _buildIcon(Icons.money, 'Purchase', '/purchase', Colors.blue[900]!),
+                          _buildIcon(Icons.money, 'Sale', '/sale', Colors.blue[900]!),
+                          _buildIcon(Icons.description, 'Report', '/report', Colors.blue[900]!),
+                          _buildIcon(Icons.swap_horiz, 'Material', '/material_transfer', Colors.blue[900]!),
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 50),
                   ],
                 ),
@@ -533,35 +541,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-
-    // Fixed Footer
-    // Positioned(
-    //   left: 0,
-    //   right: 0,
-    //   bottom: 0,
-    //   child: Container(
-    //     decoration: BoxDecoration(
-    //       color: Colors.blue[900],
-    //       borderRadius: const BorderRadius.vertical(
-    //         top: Radius.circular(20),
-    //       ),
-    //     ),
-    //     padding: const EdgeInsets.all(12.0),
-    //     child: Row(
-    //       mainAxisAlignment: MainAxisAlignment.spaceAround,
-    //       children: [
-    //         IconButton(
-    //           icon: const Icon(Icons.home, color: Colors.white, size: 30),
-    //           onPressed: () => Navigator.pushNamed(context, '/home'),
-    //         ),
-    //         IconButton(
-    //           icon: const Icon(Icons.info, color: Colors.white, size: 30),
-    //           onPressed: () => Navigator.pushNamed(context, '/about'),
-    //         ),
-    //       ],
-    //     ),
-    //   ),
-    // ),
   }
 
   Widget _buildIcon(IconData icon, String label, String route, Color color) {
@@ -579,9 +558,9 @@ class _HomeScreenState extends State<HomeScreen> {
               borderRadius: BorderRadius.circular(30),
             ),
             child: CircleAvatar(
-              radius: 28, // smaller size
+              radius: 28,
               backgroundColor: Colors.blue[900],
-              child: Icon(icon, color: Colors.white, size: 30), // smaller icon
+              child: Icon(icon, color: Colors.white, size: 30),
             ),
           ),
           const SizedBox(height: 8),
@@ -610,7 +589,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           IconButton(
             icon: const Icon(Icons.home, color: Colors.white, size: 30),
-            onPressed: () => Navigator.pushNamed(context, '/home'),
+            onPressed: () => Navigator.pushReplacementNamed(context, '/home'),
           ),
           IconButton(
             icon: const Icon(Icons.info, color: Colors.white, size: 30),
